@@ -48,7 +48,6 @@
         #loginBox label { display: block; margin-bottom: 10px; text-align: left; font-weight: bold; color: #555; }
         #loginBox input[type="text"], #loginBox input[type="password"] { width: 100%; padding: 10px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; font-size: 16px; }
         #loginBox button { width: 100%; padding: 12px; background-color: #007bff; border: none; border-radius: 4px; color: white; font-size: 18px; cursor: pointer; transition: background-color 0.3s ease; margin-top: 10px;}
-        .guest-button { background-color: #6c757d !important; }
         .password-wrapper { position: relative; display: flex; align-items: center; }
         .password-wrapper input { width: 100%; padding-right: 40px; }
         .password-wrapper i { position: absolute; right: 10px; cursor: pointer; color: #888; }
@@ -143,7 +142,6 @@
                     <i class="fas fa-eye" id="togglePassword"></i>
                 </div>
                 <button type="submit">Entrar</button>
-                <button type="button" id="guestLoginBtn" class="guest-button">Entrar como Invitado</button>
                 <p id="loginMessage" style="display: none;"></p>
             </form>
             <p style="font-size: 12px; color: #666; margin-top: 15px;">El usuario y la contraseña deben ser solicitados al administrador.</p>
@@ -233,16 +231,16 @@
                         <li>Haz clic en "Agregar".</li>
                     </ol>
                     <h3><i class="fas fa-history"></i>Paso 2: Revisa y Gestiona tu Historial</h3>
-                    <p>En la pestaña <strong>"Historial"</strong> podrás ver y administrar tus registros.</p>
+                    <p>En la pestaña <strong>"Historial"</strong> podrás ver y administrar tus registros. Solo el Administrador puede editar y borrar cualquier registro.</p>
                     <ul>
-                        <li><strong>Administrador:</strong> Puede editar y borrar cualquier registro.</li>
-                        <li><strong>Invitado:</strong> Solo puede 'Corregir' los datos que él mismo agregó durante la sesión actual. No puede borrar nada.</li>
+                        <li><strong>Editar:</strong> Se utiliza para corregir montos o tipos.</li>
+                        <li><strong>Borrar:</strong> Elimina permanentemente el registro.</li>
                     </ul>
                     <h3><i class="fas fa-sticky-note"></i>Paso 3: Bloc de Notas</h3>
                     <p>La sección de <strong>"Notas"</strong> sirve como un tablero de comunicación. Si hay una nota nueva que no has leído, verás un <strong>punto rojo</strong> en el menú y un <strong>icono parpadeante</strong> en la esquina.</p>
                     <ul>
                         <li>Para que las notificaciones desaparezcan, solo tienes que hacer clic en la pestaña "Notas".</li>
-                        <li>El Administrador puede borrar cualquier nota. El Invitado solo puede borrar las notas que él mismo ha creado.</li>
+                        <li>El Administrador puede borrar cualquier nota.</li>
                     </ul>
                     <h3><i class="fas fa-divide"></i>Paso 4: Divisor Diario y Total General</h3>
                     <p>Esta es una herramienta para hacer cálculos rápidos sobre el total de un día.</p>
@@ -291,7 +289,8 @@
         const VALID_PASSWORD = '1234';
         const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyKOYiSV7b2Kb0GBNCvRbACSP3qmX71FIepWO1hJxZQ2kqNClxWi2-o1J4u6gzRdlWCaQ/exec';
 
-        let currentUserRole = null;
+        // Ahora solo existirá el rol 'admin' (o será null/undefined)
+        let currentUserRole = null; 
         let lastSeenKey = '';
         let datos = [];
         let notes = [];
@@ -470,12 +469,15 @@
                 const resultadoDivision = divisor ? totalDia / divisor : 0;
                 
                 let tbodyHtml = '';
+                // Simplificación: Solo el admin puede editar/borrar
+                const isAdmin = currentUserRole === 'admin'; 
+
                 datosPorFecha[fecha].forEach(dato => {
-                    const guestEntries = JSON.parse(sessionStorage.getItem('guestAddedEntries') || '[]');
-                    const canEdit = currentUserRole === 'admin' || (currentUserRole === 'guest' && guestEntries.includes(dato.originalIndex));
                     let accionesHtml = '';
-                    if (canEdit) accionesHtml += `<button class="edit-btn" data-index="${dato.originalIndex}"><i class="fas fa-pencil-alt"></i></button>`;
-                    if (currentUserRole === 'admin') accionesHtml += `<button class="delete-btn" data-index="${dato.originalIndex}"><i class="fas fa-trash-alt"></i></button>`;
+                    if (isAdmin) {
+                        accionesHtml += `<button class="edit-btn" data-index="${dato.originalIndex}"><i class="fas fa-pencil-alt"></i></button>`;
+                        accionesHtml += `<button class="delete-btn" data-index="${dato.originalIndex}"><i class="fas fa-trash-alt"></i></button>`;
+                    }
                     tbodyHtml += `<tr><td data-label="Fecha">${formatearFecha(dato.fecha)}</td><td data-label="Tipo">${dato.tipo}</td><td data-label="Monto">${formatearNumero(dato.monto)}</td><td data-label="Acciones">${accionesHtml}</td></tr>`;
                 });
 
@@ -509,16 +511,16 @@
             }
             
             const notasOrdenadas = notes.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+            const isAdmin = currentUserRole === 'admin';
 
             const notesHtml = notasOrdenadas.map(nota => {
                 let deleteBtn = '';
-                const autor = nota.autor ? nota.autor.trim().toLowerCase() : '';
-                const puedeBorrar = (currentUserRole === 'admin') || (currentUserRole === 'guest' && autor === 'guest');
-
-                if (puedeBorrar) {
+                // Simplificación: Solo el admin puede borrar notas
+                if (isAdmin) {
                     deleteBtn = `<button class="note-delete-btn" data-index="${nota.originalIndex}" title="Eliminar nota"><i class="fas fa-trash-alt"></i></button>`;
                 }
 
+                // Check unread status (still comparing against current user role, which is now always 'admin')
                 const isUnread = nota.autor !== currentUserRole && new Date(nota.fecha).getTime() > lastSeen;
                 
                 return `
@@ -560,6 +562,7 @@
 
         const checkUnreadNotes = () => {
             const lastSeen = localStorage.getItem(lastSeenKey) || 0;
+            // Solo considera notas no leídas si el autor NO es el admin actual
             const hasUnread = notes.some(n => n.autor !== currentUserRole && new Date(n.fecha).getTime() > lastSeen);
             const notesIndicator = document.getElementById('notes-indicator');
             if (notesIndicator) notesIndicator.classList.toggle('show', hasUnread);
@@ -567,6 +570,7 @@
         };
 
         const markNotesAsRead = () => {
+            // Marca como leído hasta la nota más reciente de cualquier otro usuario (si la hay)
             const lastNoteFromOther = notes.filter(n => n.autor !== currentUserRole).sort((a,b) => new Date(b.fecha) - new Date(a.fecha))[0];
             if (lastNoteFromOther) {
                 localStorage.setItem(lastSeenKey, new Date(lastNoteFromOther.fecha).getTime());
@@ -665,6 +669,7 @@
                     const mensaje = document.getElementById('notaMensaje').value.trim();
                     if (mensaje) {
                         showGlobalLoader('Guardando nota...');
+                        // El autor de la nota es el rol actual, que ahora solo puede ser 'admin'
                         const response = await postToScript({ action: 'addNote', autor: currentUserRole, mensaje });
                         if (response.status === 'success') {
                             document.getElementById('notaMensaje').value = '';
@@ -791,7 +796,8 @@
                 const performAdd = async () => {
                     const tipo = document.getElementById('tipo').value;
                     const fecha = document.getElementById('fecha').value;
-                    const monto = parseFloat(document.getElementById('monto').value.replace(/\./g, ''));
+                    // Se asume que el input de monto siempre tiene un punto como separador de miles si usa formatMonto
+                    const monto = parseFloat(document.getElementById('monto').value.replace(/\./g, '')); 
                     if (!fecha || isNaN(monto)) { showAlert('Datos inválidos.'); return; }
                     showGlobalLoader('Agregando...');
                     const response = await postToScript({ action: 'add', fecha, tipo, monto });
@@ -803,7 +809,8 @@
                     }
                     hideGlobalLoader();
                 };
-                 currentUserRole === 'guest' ? showConfirm('Agregarás un dato como invitado. ¿Continuar?', performAdd) : performAdd();
+                // Eliminado el showConfirm para 'guest'
+                performAdd();
             };
             
             document.getElementById('editarForm').onsubmit = async e => {
@@ -886,7 +893,8 @@
             mainContent.style.display = 'block';
             menuToggle.style.display = 'flex';
             document.body.classList.add('loggedin');
-            lastSeenKey = `lastSeenNote_${currentUserRole}`;
+            // 'lastSeenKey' ahora usa el rol 'admin'
+            lastSeenKey = `lastSeenNote_${currentUserRole}`; 
             document.body.classList.toggle('dark-mode', localStorage.getItem('theme') === 'dark');
 
             setupMenu();
@@ -913,6 +921,7 @@
 
             if (dataUpdateInterval) clearInterval(dataUpdateInterval);
             dataUpdateInterval = setInterval(() => {
+                // Se podría optimizar esto, pero se mantiene la estructura original de refresco
                 fetchFromScript({ action: 'get' }).then(res => { if(res.status === 'success') datos = res.data; renderizarTabla(); actualizarUI(); });
                 fetchFromScript({ action: 'getNotes' }).then(res => { if(res.status === 'success') notes = res.data; renderizarNotas(); checkUnreadNotes(); });
             }, 15000);
@@ -932,12 +941,8 @@
                     document.getElementById('loginMessage').style.display = 'block';
                 }
             };
-            document.getElementById('guestLoginBtn').onclick = () => {
-                sessionStorage.setItem('userRole', 'guest');
-                sessionStorage.setItem('guestAddedEntries', '[]');
-                currentUserRole = 'guest';
-                initializeApp();
-            };
+            // ELIMINADO: guestLoginBtn.onclick
+            
             document.getElementById('togglePassword').onclick = function() {
                 const passInput = document.getElementById('password');
                 passInput.type = passInput.type === 'password' ? 'text' : 'password';
@@ -946,8 +951,9 @@
         };
 
         const checkLogin = () => {
-            currentUserRole = sessionStorage.getItem('userRole');
-            if (currentUserRole) {
+            // Solo verifica si el rol es 'admin'
+            if (sessionStorage.getItem('userRole') === 'admin') {
+                currentUserRole = 'admin';
                 initializeApp();
             } else {
                 loginOverlay.classList.remove('hidden');
@@ -960,5 +966,3 @@
     </script>
 </body>
 </html>
-
-
